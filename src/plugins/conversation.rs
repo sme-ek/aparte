@@ -51,7 +51,7 @@ impl Plugin for ConversationPlugin {
         Ok(())
     }
 
-    fn on_event(&mut self, aparte: Rc<Aparte>, event: &Event) {
+    fn on_event(&mut self, aparte: &mut Aparte, event: &Event) {
         match event {
             Event::Chat(jid) => {
                 let conversation = conversation::Conversation::Chat(conversation::Chat {
@@ -86,7 +86,7 @@ impl Plugin for ConversationPlugin {
                                         affiliation: item.affiliation.into(),
                                         role: item.role.into(),
                                     };
-                                    Rc::clone(&aparte).event(Event::Occupant{conversation: channel_jid.clone(), occupant: occupant.clone()});
+                                    aparte.event(Event::Occupant{conversation: channel_jid.clone(), occupant: occupant.clone()});
                                     channel.occupants.insert(occupant.nick.clone(), occupant);
                                 }
                             }

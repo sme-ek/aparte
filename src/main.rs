@@ -47,23 +47,23 @@ use crate::core::{Aparte, Plugin, Event};
 use crate::message::{Message};
 use crate::command::{CommandParser, Command};
 
-fn handle_stanza(aparte: Rc<Aparte>, stanza: Element) {
+fn handle_stanza(aparte: &mut Aparte, stanza: Element) {
     if let Some(message) = XmppParsersMessage::try_from(stanza.clone()).ok() {
         handle_message(aparte, message);
     } else if let Some(iq) = Iq::try_from(stanza.clone()).ok() {
         if let IqType::Error(stanza) = iq.payload.clone() {
             if let Some(text) = stanza.texts.get("en") {
               let message = Message::log(text.clone());
-              Rc::clone(&aparte).event(Event::Message(message));
+              aparte.event(Event::Message(message));
             }
         }
-        Rc::clone(&aparte).event(Event::Iq(iq));
+        aparte.event(Event::Iq(iq));
     } else if let Some(presence) = Presence::try_from(stanza.clone()).ok() {
-        Rc::clone(&aparte).event(Event::Presence(presence));
+        aparte.event(Event::Presence(presence));
     }
 }
 
-fn handle_message(aparte: Rc<Aparte>, message: XmppParsersMessage) {
+fn handle_message(aparte: &mut Aparte, message: XmppParsersMessage) {
     if let (Some(from), Some(to)) = (message.from, message.to) {
         if let Some(ref body) = message.bodies.get("") {
             match message.type_ {
@@ -72,13 +72,13 @@ fn handle_message(aparte: Rc<Aparte>, message: XmppParsersMessage) {
                     let id = message.id.unwrap_or_else(|| Uuid::new_v4().to_string());
                     let timestamp = Utc::now();
                     let message = Message::incoming_chat(id, timestamp, &from, &to, &body.0);
-                    Rc::clone(&aparte).event(Event::Message(message));
+                    aparte.event(Event::Message(message));
                 },
                 XmppParsersMessageType::Groupchat => {
                     let id = message.id.unwrap_or_else(|| Uuid::new_v4().to_string());
                     let timestamp = Utc::now();
                     let message = Message::incoming_groupchat(id, timestamp, &from, &to, &body.0);
-                    Rc::clone(&aparte).event(Event::Message(message));
+                    aparte.event(Event::Message(message));
                 },
                 _ => {},
             }
@@ -93,7 +93,7 @@ fn handle_message(aparte: Rc<Aparte>, message: XmppParsersMessage) {
                                 let id = original.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
                                 let timestamp = Utc::now();
                                 let message = Message::incoming_chat(id, timestamp, &from, &to, &body.0);
-                                Rc::clone(&aparte).event(Event::Message(message));
+                                aparte.event(Event::Message(message));
                             }
                         }
                     }
@@ -128,13 +128,13 @@ Examples:
                 Jid::Full(jid) => jid,
                 Jid::Bare(jid) => jid.with_resource("aparte"),
             };
-            Rc::clone(&aparte).log(format!("Connecting to {}", account));
+            aparte.log(format!("Connecting to {}", account));
             let client = Client::new(&full_jid.to_string(), &password).unwrap();
 
             let (sink, stream) = client.split();
             let (tx, rx) = futures::unsync::mpsc::unbounded();
 
-            Rc::clone(&aparte).add_connection(full_jid.clone(), tx);
+            aparte.add_connection(full_jid.clone(), tx);
 
             tokio::runtime::current_thread::spawn(
                 rx.forward(
@@ -147,34 +147,32 @@ Examples:
                     })
                 );
 
-            let event_aparte = Rc::clone(&aparte);
             let client = stream.for_each(move |event| {
                 if event.is_online() {
-                    Rc::clone(&event_aparte).log(format!("Connected as {}", account));
+                    aparte.log(format!("Connected as {}", account));
 
-                    Rc::clone(&event_aparte).event(Event::Connected(full_jid.clone()));
+                    aparte.event(Event::Connected(full_jid.clone()));
 
                     let mut presence = Presence::new(PresenceType::None);
                     presence.show = Some(PresenceShow::Chat);
 
-                    event_aparte.send(presence.into());
+                    aparte.send(presence.into());
                 } else if let Some(stanza) = event.into_stanza() {
                     debug!("RECV: {}", String::from(&stanza));
 
-                    handle_stanza(Rc::clone(&event_aparte), stanza);
+                    handle_stanza(aparte, stanza);
                 }
 
                 future::ok(())
             });
 
-            let error_aparte = Rc::clone(&aparte);
             let client = client.map_err(move |error| {
                 match error {
                     XmppError::Auth(auth) => {
-                        Rc::clone(&error_aparte).log(format!("Authentication failed {}", auth));
+                        aparte.log(format!("Authentication failed {}", auth));
                     },
                     error => {
-                        Rc::clone(&error_aparte).log(format!("Connection error {:?}", error));
+                        aparte.log(format!("Connection error {:?}", error));
                     },
                 }
             });
@@ -243,13 +241,13 @@ Example:
                             Jid::Bare(jid) => jid,
                             Jid::Full(jid) => jid.into(),
                         };
-                        Rc::clone(&aparte).event(Event::Chat(to));
+                        aparte.event(Event::Chat(to));
                         if message.is_some() {
                             let id = Uuid::new_v4().to_string();
                             let from: Jid = connection.into();
                             let timestamp = Utc::now();
                             let message = Message::outgoing_chat(id, timestamp, &from, &jid, &message.unwrap());
-                            Rc::clone(&aparte).event(Event::Message(message.clone()));
+                            aparte.event(Event::Message(message.clone()));
 
                             aparte.send(Element::try_from(message).unwrap());
                         }
@@ -349,8 +347,8 @@ Examples:
     |aparte, _command| {
         let command = aparte.commands.get(&cmd);
         match command {
-            Some(command) => Rc::clone(&aparte).log(command.help.to_string()),
-            None => Rc::clone(&aparte).log(format!("Unknown command {}", cmd)),
+            Some(command) => aparte.log(command.help.to_string()),
+            None => aparte.log(format!("Unknown command {}", cmd)),
         }
 
         Ok(())
@@ -399,32 +397,29 @@ fn main() {
 
     aparte.init().unwrap();
 
-    let aparte = Rc::new(aparte);
-
-    Rc::clone(&aparte).log(r#"
+    aparte.log(r#"
 ▌ ▌   ▜               ▐      ▞▀▖         ▐   ▞
 ▌▖▌▞▀▖▐ ▞▀▖▞▀▖▛▚▀▖▞▀▖ ▜▀ ▞▀▖ ▙▄▌▛▀▖▝▀▖▙▀▖▜▀ ▞▀▖
 ▙▚▌▛▀ ▐ ▌ ▖▌ ▌▌▐ ▌▛▀  ▐ ▖▌ ▌ ▌ ▌▙▄▘▞▀▌▌  ▐ ▖▛▀
 ▘ ▘▝▀▘ ▘▝▀ ▝▀ ▘▝ ▘▝▀▘  ▀ ▝▀  ▘ ▘▌  ▝▀▘▘   ▀ ▝▀▘
 "#.to_string());
-    Rc::clone(&aparte).log(format!("Version: {}", VERSION));
+    aparte.log(format!("Version: {}", VERSION));
 
     let mut rt = Runtime::new().unwrap();
     let event_stream = {
         let ui = aparte.get_plugin::<plugins::ui::UIPlugin>().unwrap();
-        ui.event_stream(Rc::clone(&aparte))
+        ui.event_stream(&mut aparte)
     };
 
-    let sig_aparte = Rc::clone(&aparte); // TODO use ARC ?
     let signals = Signals::new(&[signal_hook::SIGWINCH]).unwrap().into_async().unwrap().for_each(move |sig| {
-        Rc::clone(&sig_aparte).event(Event::Signal(sig));
+        aparte.event(Event::Signal(sig));
         Ok(())
     }).map_err(|e| panic!("{}", e));
 
     rt.spawn(signals);
 
     if let Err(e) = rt.block_on(event_stream.for_each(move |event| {
-        Rc::clone(&aparte).event(event);
+        aparte.event(event);
 
         Ok(())
     })) {

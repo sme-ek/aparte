@@ -29,7 +29,7 @@ impl<'a> Plugin for Disco<'a> {
         Ok(())
     }
 
-    fn on_event(&mut self, _aparte: Rc<Aparte>, _event: &Event) {
+    fn on_event(&mut self, _aparte: &mut Aparte, _event: &Event) {
     }
 }
 

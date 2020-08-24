@@ -350,15 +350,15 @@ pub struct UIPlugin {
 }
 
 impl UIPlugin {
-    pub fn event_stream(&self, aparte: Rc<Aparte>) -> EventStream {
+    pub fn event_stream(&self, aparte: &mut Aparte) -> EventStream {
         let file = tokio_file_unix::raw_stdin().unwrap();
         let file = tokio_file_unix::File::new_nb(file).unwrap();
         let file = file.into_io(&tokio::reactor::Handle::default()).unwrap();
 
-        FramedRead::new(file, KeyCodec::new(aparte, Rc::clone(&self.running)))
+        FramedRead::new(file, KeyCodec::new(Rc::clone(&self.running)))
     }
 
-    fn add_conversation(&mut self, aparte: Rc<Aparte>, conversation: Conversation) {
+    fn add_conversation(&mut self, aparte: &mut Aparte, conversation: Conversation) {
         let jid = conversation.jid.clone();
         match conversation.kind {
             ConversationKind::Chat => {
@@ -378,7 +378,7 @@ impl UIPlugin {
                             }
                         },
                         Event::Key(Key::PageUp) => {
-                            Rc::clone(&aparte).event(Event::LoadHistory(jid.clone()));
+                            aparte.event(Event::LoadHistory(jid.clone()));
                             view.page_up();
                         },
                         Event::Key(Key::PageDown) => view.page_down(),
@@ -633,7 +633,7 @@ impl Plugin for UIPlugin {
         Ok(())
     }
 
-    fn on_event(&mut self, aparte: Rc<Aparte>, event: &Event) {
+    fn on_event(&mut self, aparte: &mut Aparte, event: &Event) {
         match event {
             Event::ReadPassword(command) => {
                 self.password_command = Some(command.clone());
@@ -741,7 +741,7 @@ impl Plugin for UIPlugin {
                         };
 
                         if password {
-                            Rc::clone(&aparte).event(Event::Key(Key::Char('\t')));
+                            aparte.event(Event::Key(Key::Char('\t')));
                         } else {
                             let raw_buf = raw_buf.clone();
                             if raw_buf.starts_with("/") {
@@ -768,7 +768,7 @@ impl Plugin for UIPlugin {
                                     }
 
                                     self.autocomplete(&mut command);
-                                    Rc::clone(&aparte).event(Event::Completed(command.assemble()));
+                                    aparte.event(Event::Completed(command.assemble()));
                                 }
                             }
                         }
@@ -784,14 +784,14 @@ impl Plugin for UIPlugin {
                         if *password {
                             let mut command = self.password_command.take().unwrap();
                             command.args.push(raw_buf.clone());
-                            Rc::clone(&aparte).event(Event::Command(command));
+                            aparte.event(Event::Command(command));
                         } else if raw_buf.starts_with("/") {
                             match Command::try_from(&*raw_buf) {
                                 Ok(command) => {
-                                    Rc::clone(&aparte).event(Event::Command(command));
+                                    aparte.event(Event::Command(command));
                                 },
                                 Err(error) => {
-                                    Rc::clone(&aparte).event(Event::CommandError(error.to_string()));
+                                    aparte.event(Event::CommandError(error.to_string()));
                                 }
                             }
                         } else if raw_buf.len() > 0 {
@@ -805,7 +805,7 @@ impl Plugin for UIPlugin {
                                             let id = Uuid::new_v4();
                                             let timestamp = Utc::now();
                                             let message = Message::outgoing_chat(id.to_string(), timestamp, &from, &to, &raw_buf);
-                                            Rc::clone(&aparte).event(Event::SendMessage(message));
+                                            aparte.event(Event::SendMessage(message));
                                         },
                                         ConversationKind::Group => {
                                             let from: Jid = us;
@@ -813,7 +813,7 @@ impl Plugin for UIPlugin {
                                             let id = Uuid::new_v4();
                                             let timestamp = Utc::now();
                                             let message = Message::outgoing_groupchat(id.to_string(), timestamp, &from, &to, &raw_buf);
-                                            Rc::clone(&aparte).event(Event::SendMessage(message));
+                                            aparte.event(Event::SendMessage(message));
                                         },
                                     }
                                 }
@@ -845,15 +845,13 @@ impl fmt::Display for UIPlugin {
 
 pub struct KeyCodec {
     queue: VecDeque<Result<Event, IoError>>,
-    aparte: Rc<Aparte>,
     running: Rc<AtomicBool>,
 }
 
 impl KeyCodec {
-    pub fn new(aparte: Rc<Aparte>, running: Rc<AtomicBool>) -> Self {
+    pub fn new(running: Rc<AtomicBool>) -> Self {
         Self {
             queue: VecDeque::new(),
-            aparte: aparte,
             running: running,
         }
     }
@@ -868,27 +866,6 @@ impl Decoder for KeyCodec {
             let mut keys = buf.keys();
             while let Some(key) = keys.next() {
                 match key {
-                    Ok(Key::Alt('\x1b')) => {
-                        let mut ui = self.aparte.get_plugin_mut::<UIPlugin>().unwrap();
-                        match keys.next() {
-                            Some(Ok(Key::Char('['))) => {
-                                match keys.next() {
-                                    Some(Ok(Key::Char('C'))) => {
-                                        ui.next_window();
-                                    },
-                                    Some(Ok(Key::Char('D'))) => {
-                                        ui.prev_window();
-                                    },
-                                    Some(Ok(_)) => {},
-                                    Some(Err(_)) => {},
-                                    None => {},
-                                };
-                            },
-                            Some(Ok(_)) => {},
-                            Some(Err(_)) => {},
-                            None => {},
-                        };
-                    },
                     Ok(Key::Char(c)) => self.queue.push_back(Ok(Event::Key(Key::Char(c)))),
                     Ok(Key::Backspace) => self.queue.push_back(Ok(Event::Key(Key::Backspace))),
                     Ok(Key::Delete) => self.queue.push_back(Ok(Event::Key(Key::Delete))),

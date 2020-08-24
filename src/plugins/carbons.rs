@@ -33,7 +33,7 @@ impl Plugin for CarbonsPlugin {
         disco.add_feature(ns::CARBONS)
     }
 
-    fn on_event(&mut self, aparte: Rc<Aparte>, event: &Event) {
+    fn on_event(&mut self, aparte: &mut Aparte, event: &Event) {
         match event {
             Event::Connected(_jid) => aparte.send(self.enable()),
             _ => {},

@@ -54,7 +54,7 @@ pub enum Event {
 pub trait Plugin: fmt::Display {
     fn new() -> Self where Self: Sized;
     fn init(&mut self, mgr: &Aparte) -> Result<(), ()>;
-    fn on_event(&mut self, aparte: Rc<Aparte>, event: &Event);
+    fn on_event(&mut self, aparte: &mut Aparte, event: &Event);
 }
 
 pub trait AnyPlugin: Any + Plugin {
@@ -128,8 +128,8 @@ impl Aparte {
         self.commands.insert(command.name.to_string(), command);
     }
 
-    pub fn parse_command(self: Rc<Self>, command: Command) -> Result<(), String> {
-        match Rc::clone(&self).commands.get(&command.args[0]) {
+    pub fn parse_command(&mut self, command: Command) -> Result<(), String> {
+        match self.commands.get(&command.args[0]) {
             Some(parser) => (parser.parser)(self, command),
             None => Err(format!("Unknown command {}", command.args[0])),
         }
@@ -228,24 +228,24 @@ impl Aparte {
         }
     }
 
-    pub fn event(self: Rc<Self>, event: Event) {
+    pub fn event(&mut self, event: Event) {
         self.event_queue.borrow_mut().push(event);
         if let Ok(_lock) = self.event_lock.try_borrow_mut() {
             while self.event_queue.borrow().len() > 0 {
                 let event = self.event_queue.borrow_mut().remove(0);
                 for (_, plugin) in self.plugins.iter() {
-                    plugin.borrow_mut().as_plugin().on_event(Rc::clone(&self), &event);
+                    plugin.borrow_mut().as_plugin().on_event(self, &event);
                 }
 
                 match event {
                     Event::Command(command) => {
-                        match Rc::clone(&self).parse_command(command) {
-                            Err(err) => Rc::clone(&self).log(err),
+                        match self.parse_command(command) {
+                            Err(err) => self.log(err),
                             Ok(()) => {},
                         }
                     },
                     Event::SendMessage(message) => {
-                        Rc::clone(&self).event(Event::Message(message.clone()));
+                        self.event(Event::Message(message.clone()));
                         if let Ok(xmpp_message) = Element::try_from(message) {
                             self.send(xmpp_message);
                         }
@@ -256,7 +256,7 @@ impl Aparte {
         }
     }
 
-    pub fn log(self: Rc<Self>, message: String) {
+    pub fn log(&mut self, message: String) {
         let message = Message::log(message);
         self.event(Event::Message(message));
     }
@@ -267,7 +267,7 @@ macro_rules! parse_command_args {
     ($aparte:ident, $command:ident, $index:ident) => ();
     ($aparte:ident, $command:ident, $index:ident, (password) $arg:ident) => (
         if $command.args.len() <= $index {
-            Rc::clone(&$aparte).event(Event::ReadPassword($command.clone()));
+            $aparte.event(Event::ReadPassword($command.clone()));
             return Ok(())
         }
 
@@ -342,7 +342,7 @@ macro_rules! command_def {
             CommandParser {
                 name: stringify!($name),
                 help: $help,
-                parser: Box::new(|$aparte: Rc<Aparte>, $command: Command| -> Result<(), String> {
+                parser: Box::new(|$aparte: &mut Aparte, $command: Command| -> Result<(), String> {
                     #[allow(unused_mut)]
                     $body
                 }),
@@ -359,7 +359,7 @@ macro_rules! command_def {
             CommandParser {
                 name: stringify!($name),
                 help: $help,
-                parser: Box::new(|$aparte: Rc<Aparte>, $command: Command| -> Result<(), String> {
+                parser: Box::new(|$aparte: &mut Aparte, $command: Command| -> Result<(), String> {
                     #[allow(unused_mut)]
                     let mut index = 1;
                     parse_command_args!($aparte, $command, index, $($(($attr))? $argnames),*);

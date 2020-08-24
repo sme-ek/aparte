@@ -58,7 +58,7 @@ impl Plugin for ContactPlugin {
         Ok(())
     }
 
-    fn on_event(&mut self, aparte: Rc<Aparte>, event: &Event) {
+    fn on_event(&mut self, aparte: &mut Aparte, event: &Event) {
         match event {
             Event::Connected(_jid) => aparte.send(self.request()),
             Event::Iq(iq) => {
@@ -68,7 +68,7 @@ impl Plugin for ContactPlugin {
                             for item in roster.items {
                                 let contact: contact::Contact = item.clone().into();
                                 self.contacts.insert(contact.jid.clone(), contact.clone());
-                                Rc::clone(&aparte).event(Event::Contact(contact.clone()));
+                                aparte.event(Event::Contact(contact.clone()));
                             }
                         }
                     }
@@ -88,7 +88,7 @@ impl Plugin for ContactPlugin {
                             Some(presence::Show::Xa) => contact::Presence::Xa,
                             None => contact::Presence::Available,
                         };
-                        Rc::clone(&aparte).event(Event::ContactUpdate(contact.clone()));
+                        aparte.event(Event::ContactUpdate(contact.clone()));
                     }
                 }
             },
