@@ -669,7 +669,9 @@ impl ModTrait for BookmarksMod {
     fn init(&mut self, aparte: &mut Aparte) -> Result<(), ()> {
         aparte.add_command(bookmark::new());
         let mut disco = aparte.get_mod_mut::<disco::DiscoMod>();
-        disco.add_feature(ns::BOOKMARKS2)
+        disco.add_feature(ns::BOOKMARKS2);
+
+        Ok(())
     }
 
     fn on_event(&mut self, aparte: &mut Aparte, event: &Event) {
@@ -703,7 +705,7 @@ impl ModTrait for BookmarksMod {
                 }
                 _ => {}
             },
-            Event::PubSub(account, pubsub_event) => match pubsub_event {
+            Event::PubSub{ account, from: _, event } => match event {
                 PubSubEvent::PublishedItems { node, items } => match &node.0 as &str {
                     ns::BOOKMARKS | ns::BOOKMARKS2 => self.handle_bookmarks(
                         aparte,
