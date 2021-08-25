@@ -18,6 +18,7 @@ extern crate xmpp_parsers;
 #[macro_use]
 mod terminus;
 mod account;
+mod async_iq;
 mod config;
 mod contact;
 mod conversation;

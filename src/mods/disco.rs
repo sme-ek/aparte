@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
-use xmpp_parsers::Element;
 use xmpp_parsers::disco::Feature;
 use xmpp_parsers::disco;
 use xmpp_parsers::iq::{Iq, IqType};
