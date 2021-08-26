@@ -32,7 +32,7 @@ mod i18n;
 mod mods;
 mod word;
 
-use crate::core::Aparte;
+use crate::core::AparteCore;
 
 fn main() {
     let data_dir = dirs::data_dir().unwrap();
@@ -64,7 +64,7 @@ fn main() {
 
     info!("Starting aparté");
 
-    let mut aparte = Aparte::new(config);
+    let mut aparte = AparteCore::new(config);
 
     aparte.init().unwrap();
 
