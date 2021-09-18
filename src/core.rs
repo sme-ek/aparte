@@ -5,7 +5,6 @@ use chrono::{DateTime, FixedOffset, Local as LocalTz};
 use core::fmt::Debug;
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
-use linked_hash_map::LinkedHashMap;
 use rand::{self, Rng};
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -847,7 +846,7 @@ impl Aparte {
             event_rx: Some(event_rx),
             send_tx,
             send_rx: Some(send_rx),
-            config,
+            config: config.clone(),
             pending_iq: Arc::new(Mutex::new(HashMap::new())),
         };
 
@@ -1257,7 +1256,7 @@ impl Aparte {
             Event::Stanza(account, stanza) => {
                 self.handle_stanza(account, stanza);
             }
-            Event::RawMessage(account, message, delay, archive) => {
+            Event::RawMessage{account, message, delay, archive} => {
                 self.handle_xmpp_message(account, message, delay, archive);
             }
             Event::Join {
