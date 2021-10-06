@@ -26,6 +26,7 @@ use tokio_xmpp::{
 };
 use uuid::Uuid;
 use xmpp_parsers;
+use xmpp_parsers::ns;
 use xmpp_parsers::hashes as xmpp_hashes;
 use xmpp_parsers::caps::{self, Caps};
 use xmpp_parsers::delay::Delay;
@@ -1305,12 +1306,26 @@ impl Aparte {
     }
 
     fn handle_stanza(&mut self, account: Account, stanza: Element) {
-        if let Ok(message) = XmppParsersMessage::try_from(stanza.clone()) {
-            self.handle_xmpp_message(account, message, None, false);
-        } else if let Ok(iq) = Iq::try_from(stanza.clone()) {
-            self.handle_iq(account, iq);
-        } else if let Ok(presence) = Presence::try_from(stanza.clone()) {
-            self.schedule(Event::Presence(account, presence));
+        match (&stanza.ns()[..], stanza.name()) {
+            (ns::JABBER_CLIENT, "iq") => {
+                match Iq::try_from(stanza.clone()) {
+                    Ok(iq) => self.handle_iq(account, iq),
+                    Err(err) => error!("{}", err),
+                }
+            }
+            (ns::JABBER_CLIENT, "message") => {
+                match XmppParsersMessage::try_from(stanza.clone()) {
+                    Ok(message) => self.handle_xmpp_message(account, message, None, false),
+                    Err(err) => error!("{}", err),
+                }
+            }
+            (ns::JABBER_CLIENT, "presence") => {
+                match Presence::try_from(stanza.clone()) {
+                    Ok(presence) => self.schedule(Event::Presence(account, presence)),
+                    Err(err) => error!("{}", err),
+                }
+            }
+            (_, _) => warn!("can't handle stanza {:?}", stanza),
         }
     }
 
